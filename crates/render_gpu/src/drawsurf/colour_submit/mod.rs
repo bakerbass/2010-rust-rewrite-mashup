@@ -1793,6 +1793,9 @@ struct PreparedExactDraw {
     /// The loaded map only stands in for a Minecraft world: this draw of
     /// its world is prepared but not submitted.
     minecraft_hidden: bool,
+    /// A SkyCraft guest's static model: submitted, but clipped away, so
+    /// it leaves neither colour nor depth (see `minecraft_hidden`).
+    guest_clipped: bool,
 }
 
 fn bsp_draw_source(kind: &RetainedDrawKind) -> (Option<BspCameraLane>, u16, u16, u16) {
@@ -3212,8 +3215,21 @@ fn submit_exact_draw_run<'a>(
     let vp_y = viewport.y as f32;
     let vp_w = viewport.z as f32;
     let vp_h = viewport.w as f32;
+    let mut clipped = false;
 
     for draw in draws {
+        // A SkyCraft guest's static models stay in the pass but are drawn
+        // through an empty scissor: anything they left in the colour buffer
+        // could reach Skyrim wherever the depth mask lets it.
+        if draw.guest_clipped != clipped {
+            issue_indirect_batch!();
+            clipped = draw.guest_clipped;
+            if clipped {
+                pass.set_scissor_rect(0, 0, 0, 0);
+            } else {
+                pass.set_scissor_rect(viewport.x, viewport.y, viewport.z, viewport.w);
+            }
+        }
         let Some(gpu_pipeline) = registry.ready(draw.pipeline) else {
             *refused_draws = refused_draws.saturating_add(1);
             *encode_not_ready = encode_not_ready.saturating_add(1);
@@ -5940,6 +5956,8 @@ impl ExactPrepare<'_> {
                             RetainedDrawKind::Smodel { .. } => !frame::skycraft::active(),
                             _ => false,
                         },
+                    guest_clipped: frame::skycraft::active()
+                        && matches!(kind, RetainedDrawKind::Smodel { .. }),
                     depth_min,
                     depth_max,
                     state: GfxPassState::from_bits(executable.state),

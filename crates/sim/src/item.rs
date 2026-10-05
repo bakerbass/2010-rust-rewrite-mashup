@@ -145,12 +145,21 @@ fn set_ammo_on_ps(
 /// Guns every player on a Minecraft map carries besides its class.
 const BLOCK_WORLD_GUNS: [&str; 3] = ["cheytac_mp", "spas12_mp", "ump45_mp"];
 
+static CARRY_BLOCK_WORLD_GUNS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Players carry the Minecraft map's guns without a block world: SkyCraft's
+/// guest, whose hotbar is the real Minecraft's.
+pub fn carry_block_world_guns(on: bool) {
+    CARRY_BLOCK_WORLD_GUNS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// On a Minecraft map every player also carries the Intervention, SPAS-12
 /// and UMP45, and never runs out: each weapon's clips stay full and its
 /// reserve (grenades too) at the most it holds, as MW2's
 /// `player_sustainAmmo` keeps them.
 pub(crate) fn sustain_block_world_arsenal(world: &mut FrameWorld) {
-    if !crate::voxel::active() || !world.publishes_snapshot() {
+    let carried = crate::voxel::active() || CARRY_BLOCK_WORLD_GUNS.load(std::sync::atomic::Ordering::Relaxed);
+    if !carried || !world.publishes_snapshot() {
         return;
     }
     let names = world.weapon_script_names();

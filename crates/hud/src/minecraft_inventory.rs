@@ -296,7 +296,7 @@ pub(crate) fn update_minecraft_hud(
     }
     let now = time.elapsed_secs_f64();
     let window = windows.single().ok();
-    let mouse = window.and_then(Window::cursor_position);
+    let mouse = ui.pointer.or_else(|| window.and_then(Window::cursor_position));
 
     // Opening and closing, and the hotbar's keys.
     let open_before = ui.inventory_open;

@@ -30,14 +30,104 @@ fn weapon_item(weapon: u32) -> ItemStack {
     stack
 }
 
+/// Item icons, made the way the viewer makes them, in one atlas the HUD
+/// draws from, and the items' display names.
 #[derive(Default)]
-pub(crate) struct InventoryUi {
+pub struct ItemIconAtlas {
     atlas: Option<image::RgbaImage>,
     handle: Option<Handle<Image>>,
     cells: HashMap<String, u32>,
     failed: HashSet<String>,
     language: Option<HashMap<String, String>>,
     dirty: bool,
+}
+
+impl ItemIconAtlas {
+    /// An item's display name (`minecraft:oak_log`: "Oak Log").
+    pub fn item_name(&mut self, packs: &PackStack, id: &str) -> String {
+        let language = self
+            .language
+            .get_or_insert_with(|| minecraft_terrain::item_icons::language(packs).unwrap_or_default());
+        minecraft_terrain::item_icons::item_name(language, id)
+    }
+
+    /// Gives the HUD the name and icon of each item of `ids` it lacks, and
+    /// the atlas again if it grew. Guns (`iw4:weapon/...`) draw MW2's icons
+    /// and are left out.
+    pub fn publish<'a>(
+        &mut self,
+        ui: &mut MinecraftUi,
+        ids: impl IntoIterator<Item = &'a str>,
+        packs: &PackStack,
+        images: &mut Assets<Image>,
+    ) {
+        for id in ids {
+            if id.starts_with(WEAPON_PREFIX) {
+                continue;
+            }
+            if !ui.names.contains_key(id) {
+                let name = self.item_name(packs, id);
+                ui.names.insert(id.to_owned(), name);
+            }
+            if self.cells.contains_key(id) || self.failed.contains(id) {
+                continue;
+            }
+            let cell = self.cells.len() as u32;
+            if cell >= (ATLAS / ICON) * (ATLAS / ICON) {
+                continue;
+            }
+            match minecraft_terrain::item_icons::item_icon(packs, id, ICON as usize) {
+                Ok(Some(icon)) => {
+                    let atlas = self.atlas.get_or_insert_with(|| image::RgbaImage::new(ATLAS, ATLAS));
+                    let (x, y) = ((cell % (ATLAS / ICON)) * ICON, (cell / (ATLAS / ICON)) * ICON);
+                    let icon = image::imageops::resize(&icon, ICON, ICON, image::imageops::FilterType::Nearest);
+                    image::imageops::replace(atlas, &icon, i64::from(x), i64::from(y));
+                    let size = ATLAS as f32;
+                    ui.icon_rects.insert(
+                        id.to_owned(),
+                        [x as f32 / size, y as f32 / size, (x + ICON) as f32 / size, (y + ICON) as f32 / size],
+                    );
+                    self.cells.insert(id.to_owned(), cell);
+                    self.dirty = true;
+                }
+                Ok(None) => {
+                    diag::warn!(World, "Minecraft item icon: no model for `{id}`");
+                    self.failed.insert(id.to_owned());
+                }
+                Err(error) => {
+                    diag::warn!(World, "Minecraft item icon for `{id}` failed: {error}");
+                    self.failed.insert(id.to_owned());
+                }
+            }
+        }
+        if self.dirty
+            && let Some(atlas) = self.atlas.as_ref()
+        {
+            self.dirty = false;
+            let image = Image {
+                sampler: ImageSampler::nearest(),
+                ..Image::new(
+                    Extent3d { width: ATLAS, height: ATLAS, depth_or_array_layers: 1 },
+                    TextureDimension::D2,
+                    atlas.as_raw().clone(),
+                    TextureFormat::Rgba8UnormSrgb,
+                    RenderAssetUsages::default(),
+                )
+            };
+            match self.handle.as_ref() {
+                Some(handle) => {
+                    let _ = images.insert(handle.id(), image);
+                }
+                None => self.handle = Some(images.add(image)),
+            }
+            ui.icons = self.handle.clone();
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct InventoryUi {
+    icons: ItemIconAtlas,
     /// The gun last asked for, until the player state holds it.
     pending_weapon: Option<u32>,
     last_selected: Option<usize>,
@@ -189,9 +279,6 @@ impl InventoryUi {
         packs: &PackStack,
         images: &mut Assets<Image>,
     ) {
-        let language = self
-            .language
-            .get_or_insert_with(|| minecraft_terrain::item_icons::language(packs).unwrap_or_default());
         let mut stacks = Vec::new();
         let mut convert = |stack: &Option<ItemStack>| {
             stack.as_ref().map(|s| {
@@ -212,70 +299,11 @@ impl InventoryUi {
             let name = inventory.slots[selected]
                 .as_ref()
                 .filter(|s| weapon_of(s).is_none())
-                .map(|s| minecraft_terrain::item_icons::item_name(language, &s.id));
+                .map(|s| self.icons.item_name(packs, &s.id));
             ui.selected_name = name.map(|name| (name, 0.0));
         }
         ui.selected = selected;
-        for id in stacks {
-            if id.starts_with(WEAPON_PREFIX) {
-                continue;
-            }
-            if !ui.names.contains_key(&id) {
-                ui.names.insert(id.clone(), minecraft_terrain::item_icons::item_name(language, &id));
-            }
-            if self.cells.contains_key(&id) || self.failed.contains(&id) {
-                continue;
-            }
-            let cell = self.cells.len() as u32;
-            if cell >= (ATLAS / ICON) * (ATLAS / ICON) {
-                continue;
-            }
-            match minecraft_terrain::item_icons::item_icon(packs, &id, ICON as usize) {
-                Ok(Some(icon)) => {
-                    let atlas = self.atlas.get_or_insert_with(|| image::RgbaImage::new(ATLAS, ATLAS));
-                    let (x, y) = ((cell % (ATLAS / ICON)) * ICON, (cell / (ATLAS / ICON)) * ICON);
-                    let icon = image::imageops::resize(&icon, ICON, ICON, image::imageops::FilterType::Nearest);
-                    image::imageops::replace(atlas, &icon, i64::from(x), i64::from(y));
-                    let size = ATLAS as f32;
-                    ui.icon_rects.insert(
-                        id.clone(),
-                        [x as f32 / size, y as f32 / size, (x + ICON) as f32 / size, (y + ICON) as f32 / size],
-                    );
-                    self.cells.insert(id, cell);
-                    self.dirty = true;
-                }
-                Ok(None) => {
-                    diag::warn!(World, "Minecraft item icon: no model for `{id}`");
-                    self.failed.insert(id);
-                }
-                Err(error) => {
-                    diag::warn!(World, "Minecraft item icon for `{id}` failed: {error}");
-                    self.failed.insert(id);
-                }
-            }
-        }
-        if self.dirty
-            && let Some(atlas) = self.atlas.as_ref()
-        {
-            self.dirty = false;
-            let image = Image {
-                sampler: ImageSampler::nearest(),
-                ..Image::new(
-                    Extent3d { width: ATLAS, height: ATLAS, depth_or_array_layers: 1 },
-                    TextureDimension::D2,
-                    atlas.as_raw().clone(),
-                    TextureFormat::Rgba8UnormSrgb,
-                    RenderAssetUsages::default(),
-                )
-            };
-            match self.handle.as_ref() {
-                Some(handle) => {
-                    let _ = images.insert(handle.id(), image);
-                }
-                None => self.handle = Some(images.add(image)),
-            }
-            ui.icons = self.handle.clone();
-        }
+        self.icons.publish(ui, stacks.iter().map(String::as_str), packs, images);
     }
 }
 

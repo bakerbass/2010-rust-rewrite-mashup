@@ -321,6 +321,10 @@ fn update(
         Option<Res<frame::ActivePad>>,
     ),
 ) {
+    // SkyCraft's guest: the real Minecraft owns the inventory (skycraft_guest).
+    if frame::skycraft::active() {
+        return;
+    }
     let pad = active_pad.and_then(|active| active.0).and_then(|entity| gamepads.get(entity).ok());
     for _ in torn_down.read() {
         stop(&mut runtime, &mut view);

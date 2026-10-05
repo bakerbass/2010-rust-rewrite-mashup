@@ -17,6 +17,7 @@ pub mod hudelem;
 pub mod identities;
 pub mod input;
 mod item;
+pub use item::carry_block_world_guns;
 mod mantle_xanim;
 pub mod voxel;
 pub mod match_state;

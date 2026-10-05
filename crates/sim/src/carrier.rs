@@ -271,6 +271,14 @@ impl SimWorld {
         self.frame().set_origin(id, origin)
     }
 
+    /// Holds a player where an outside controller says after each move; `None` releases it.
+    pub fn set_pinned_motion(&mut self, id: ClientId, motion: Option<crate::PinnedMotion>) {
+        match motion {
+            Some(motion) => self.frame().pinned_motion.insert(id, motion),
+            None => self.frame().pinned_motion.remove(&id),
+        };
+    }
+
     pub fn set_legs_anim(&mut self, id: ClientId, legs_anim: i32) -> bool {
         self.frame().set_legs_anim(id, legs_anim)
     }

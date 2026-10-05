@@ -5909,9 +5909,12 @@ name = "skycraft_guest"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "console",
  "diag",
  "frame",
+ "net",
  "render_scene",
+ "sim",
  "windows-sys 0.61.2",
 ]
 

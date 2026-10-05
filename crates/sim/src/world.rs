@@ -50,6 +50,18 @@ pub struct Tick(pub u32);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ClientId(pub u32);
 
+/// Where an outside controller (a SkyCraft guest following Minecraft's player)
+/// holds a player after each move. Unlike external motion, the move still runs,
+/// so weapon handling, ADS, sprint and spread behave as in play; only where the
+/// player ends up, how fast it is going and whether it stands on ground come
+/// from outside.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PinnedMotion {
+    pub origin: [f32; 3],
+    pub velocity: [f32; 3],
+    pub on_ground: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PendingPlayerCardKind {
     SetSlot {
@@ -618,6 +630,7 @@ pub struct SimState {
     pending_final_kill: Option<(ClientId, ClientId)>,
 
     pub(crate) external_motion: std::collections::HashSet<ClientId>,
+    pub(crate) pinned_motion: HashMap<ClientId, PinnedMotion>,
     last_pmove_walking: HashMap<ClientId, i32>,
 
     stuck_holdrand: u32,
@@ -716,6 +729,7 @@ impl Default for SimState {
             pending_script_audio: Vec::new(),
             pending_final_kill: None,
             external_motion: Default::default(),
+            pinned_motion: HashMap::new(),
             last_pmove_walking: HashMap::new(),
             stuck_holdrand: 0,
             last_stuck_ejects: Vec::new(),
@@ -1529,6 +1543,7 @@ impl SimState {
         self.lagcomp_sample.remove(&id);
         self.lagcomp_commands.retain(|(client, _), _| *client != id);
         self.external_motion.remove(&id);
+        self.pinned_motion.remove(&id);
         self.last_pmove_walking.remove(&id);
         self.last_anim_movement.remove(&id);
         self.anim_command_buttons.remove(&id);

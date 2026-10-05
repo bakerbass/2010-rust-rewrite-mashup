@@ -382,6 +382,7 @@ fn run_players_system(ecs: &mut World) {
                 linked_brushes: &linked_brushes,
                 model_brushes: &model_brushes,
             };
+            let pinned = world.pinned_motion.get(id).copied();
             let script = world.player_anim_script();
             let mantle = world.xanims();
             let (
@@ -415,6 +416,15 @@ fn run_players_system(ecs: &mut World) {
                     mantle.as_ref(),
                 );
                 let pml = result.pml;
+                if let Some(pin) = pinned {
+                    ps.origin = pin.origin;
+                    ps.velocity = pin.velocity;
+                    ps.ground_entity_num = if pin.on_ground {
+                        i32::from(trace_iw4::ENTITYNUM_WORLD)
+                    } else {
+                        playerstate_iw4::ENTITYNUM_NONE
+                    };
+                }
                 let anim_movetype = pml.mantle_movetype.or_else(|| {
                     footsteps_anim_move_type(
                         ps,

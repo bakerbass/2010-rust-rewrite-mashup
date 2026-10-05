@@ -14,9 +14,11 @@ use bevy::render::render_resource::{TextureFormat, TextureUsages};
 use bevy::window::PrimaryWindow;
 
 mod link;
+mod motion;
 pub mod proto;
 
 use link::Link;
+use motion::McLink;
 
 /// The overlay's texture format. Bevy's window surface on Windows is BGRA, and
 /// IW4L's passes are built for the surface format, so the target matches it;
@@ -31,7 +33,13 @@ pub struct SkycraftGuestPlugin;
 impl Plugin for SkycraftGuestPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Guest>()
-            .add_systems(Update, (connect, retarget_lens).chain());
+            .add_systems(Update, (connect, retarget_lens).chain())
+            .add_systems(
+                Update,
+                drive_soldier
+                    .after(connect)
+                    .in_set(frame::ClientSet::Reconcile),
+            );
     }
 }
 
@@ -44,6 +52,13 @@ struct Guest {
     readback: Option<Entity>,
     frames: u64,
     rgba: Vec<u8>,
+    /// Minecraft's player, from SkyCraft's main mapping.
+    mc: Option<McLink>,
+    /// Where the soldier spawned; it stays there (see `motion`).
+    anchor: Option<[f32; 3]>,
+    /// MW2 buttons the guest is holding down for Minecraft.
+    held: std::collections::BTreeSet<&'static str>,
+    state_frames: u64,
 }
 
 /// The world camera, once it renders into the overlay image.
@@ -165,5 +180,75 @@ fn publish_frame(frame: On<ReadbackComplete>, mut guest: ResMut<Guest>) {
             size.x,
             size.y
         );
+    }
+}
+
+/// Makes the soldier follow Minecraft's player: look, movement, sprint, and the
+/// pinned spot with Minecraft's velocity (see `motion`).
+fn drive_soldier(
+    mut guest: ResMut<Guest>,
+    local: Res<net::LocalPresentClient>,
+    presented: Res<net::PresentedSnapshot>,
+    authority: Option<ResMut<net::AuthorityWorld>>,
+    mut look: ResMut<net::LookState>,
+    mut actions: ResMut<net::ClientActionInput>,
+    mut console: ResMut<console::ConsoleInputState>,
+) {
+    if guest.link.is_none() {
+        return;
+    }
+    if guest.mc.is_none() {
+        guest.mc = McLink::open();
+        if guest.mc.is_some() {
+            diag::info!(Launch, "SkyCraft: following Minecraft's player");
+        }
+    }
+    let pose = guest.mc.as_ref().and_then(McLink::read);
+    let ps = presented.player(local.0).filter(|ps| ps.pm_type == 0);
+    let ready = pose.is_some_and(|pose| pose.in_world()) && ps.is_some();
+    guest.state_frames += 1;
+    if let Some(link) = &guest.link {
+        let state = proto::State {
+            flags: if ready { proto::ST_READY } else { 0 },
+            fov_scale: 1.0,
+            ..proto::State::default()
+        };
+        link.write_state(&state, guest.state_frames);
+    }
+    let (Some(pose), Some(ps), true) = (pose, ps, ready) else {
+        return;
+    };
+    let anchor = *guest.anchor.get_or_insert(ps.origin);
+    if let Some(mut authority) = authority {
+        authority.0.set_pinned_motion(
+            local.0,
+            Some(sim::PinnedMotion {
+                origin: anchor,
+                velocity: pose.iw4_velocity(),
+                on_ground: pose.on_ground(),
+            }),
+        );
+    }
+    let [pitch, yaw, _] = pose.iw4_angles();
+    look.angles = motion::angles_to_short([
+        pitch - ps.delta_angles[0],
+        yaw - ps.delta_angles[1],
+        0.0,
+    ]);
+    actions.pad_move = pose.stick();
+    hold(&mut console, &mut guest.held, "+breath_sprint", pose.sprinting());
+}
+
+/// Presses or releases an MW2 button the way the console's `hold` does.
+fn hold(
+    console: &mut console::ConsoleInputState,
+    held: &mut std::collections::BTreeSet<&'static str>,
+    button: &'static str,
+    down: bool,
+) {
+    if down && held.insert(button) {
+        console.hold(button);
+    } else if !down && held.remove(button) {
+        console.release(button);
     }
 }

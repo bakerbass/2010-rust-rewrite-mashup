@@ -85,6 +85,28 @@ impl Link {
         (w > 0 && h > 0).then(|| (w.min(proto::MAX_OVERLAY_W), h.min(proto::MAX_OVERLAY_H)))
     }
 
+    /// Writes `State` under its seqlock (odd while writing).
+    pub fn write_state(&self, state: &proto::State, guest_frame: u64) {
+        let at = |field: usize| proto::OFF_STATE + field;
+        let seq = self.u32_at(at(proto::ST_SEQ));
+        let start = seq.load(Ordering::Relaxed).wrapping_add(1) | 1;
+        seq.store(start, Ordering::Relaxed);
+        std::sync::atomic::fence(Ordering::Release);
+        self.u32_at(at(proto::ST_FLAGS)).store(state.flags, Ordering::Relaxed);
+        self.u32_at(at(proto::ST_WEAPON)).store(state.weapon, Ordering::Relaxed);
+        self.u32_at(at(proto::ST_AMMO_CLIP)).store(state.ammo_clip as u32, Ordering::Relaxed);
+        self.u32_at(at(proto::ST_AMMO_STOCK)).store(state.ammo_stock as u32, Ordering::Relaxed);
+        for (field, value) in [
+            (proto::ST_ADS_FRACTION, state.ads_fraction),
+            (proto::ST_FOV_SCALE, state.fov_scale),
+            (proto::ST_SPREAD, state.spread),
+        ] {
+            self.u32_at(at(field)).store(value.to_bits(), Ordering::Relaxed);
+        }
+        self.u64_at(at(proto::ST_GUEST_FRAME)).store(guest_frame, Ordering::Relaxed);
+        seq.store(start.wrapping_add(1), Ordering::Release);
+    }
+
     pub fn heartbeat(&self) {
         self.u64_at(proto::HDR_GUEST_HEARTBEAT)
             .store(tick_ms(), Ordering::Release);

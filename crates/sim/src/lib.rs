@@ -129,7 +129,7 @@ pub use spawn::{
 pub use step::phase_materialize_entity_dobjs;
 pub use world::{
     ClientId, HitvolDumpRow, PendingLocalSound, PendingPlayerCardEvent, PendingPlayerCardKind,
-    PendingPrint, PlayerKitCollision, SimBrush, SimClipBsp, SimClipCmodels, SimClipMesh,
+    PendingPrint, PinnedMotion, PlayerKitCollision, SimBrush, SimClipBsp, SimClipCmodels, SimClipMesh,
     SimStaticModel, SimTriggerHull, Tick, WeaponScriptSounds, blank_player_state,
 };
 pub use world_objects::{

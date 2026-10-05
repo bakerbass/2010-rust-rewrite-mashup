@@ -7,9 +7,12 @@ description = "SkyCraft guest mode: MW2's guns and HUD rendered offscreen into s
 
 [dependencies]
 bevy.workspace = true
+console.workspace = true
 diag.workspace = true
 frame.workspace = true
+net.workspace = true
 render_scene.workspace = true
+sim.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading"] }

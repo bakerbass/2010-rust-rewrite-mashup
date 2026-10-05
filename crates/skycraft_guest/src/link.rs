@@ -182,6 +182,85 @@ impl Link {
         Some(input)
     }
 
+    /// The gun Minecraft holds (`proto::WEAPONS`) and the buttons held for it,
+    /// or `None` while Minecraft is mid-write.
+    pub fn read_control(&self) -> Option<(u32, u32)> {
+        let seq = self.u32_at(proto::OFF_CONTROL + proto::CT_SEQ);
+        for _ in 0..4 {
+            let before = seq.load(Ordering::Acquire);
+            if before & 1 != 0 {
+                std::hint::spin_loop();
+                continue;
+            }
+            let weapon = self.u32_at(proto::OFF_CONTROL + proto::CT_WEAPON).load(Ordering::Relaxed);
+            let buttons = self.u32_at(proto::OFF_CONTROL + proto::CT_BUTTONS).load(Ordering::Relaxed);
+            std::sync::atomic::fence(Ordering::Acquire);
+            if seq.load(Ordering::Relaxed) == before {
+                return Some((weapon, buttons));
+            }
+        }
+        None
+    }
+
+    /// Hands Minecraft a bullet to trace. False if its ring is full.
+    pub fn push_shot(&self, shot: &proto::Shot) -> bool {
+        let ring = proto::OFF_SHOT_RING;
+        let head = self.u64_at(ring + proto::RING_HEAD).load(Ordering::Relaxed);
+        let tail = self.u64_at(ring + proto::RING_TAIL).load(Ordering::Acquire);
+        if head - tail >= proto::SHOT_ENTRIES {
+            return false;
+        }
+        let at = ring + proto::RING_DATA + (head % proto::SHOT_ENTRIES) as usize * proto::SHOT_BYTES;
+        let u32s = [(0x00, shot.id), (0x04, shot.blast), (0x08, shot.weapon), (0x0C, 0)];
+        for (off, value) in u32s {
+            self.u32_at(at + off).store(value, Ordering::Relaxed);
+        }
+        for (i, value) in shot.origin.iter().enumerate() {
+            self.u64_at(at + 0x10 + i * 8).store(value.to_bits(), Ordering::Relaxed);
+        }
+        let floats = [
+            shot.direction[0],
+            shot.direction[1],
+            shot.direction[2],
+            shot.range,
+            shot.damage,
+            shot.min_damage,
+            shot.damage_range,
+            shot.min_damage_range,
+            shot.head_multiplier,
+            shot.body_multiplier,
+        ];
+        for (i, value) in floats.iter().enumerate() {
+            self.u32_at(at + 0x28 + i * 4).store(value.to_bits(), Ordering::Relaxed);
+        }
+        self.u64_at(ring + proto::RING_HEAD).store(head + 1, Ordering::Release);
+        true
+    }
+
+    /// The next thing one of the guest's bullets hit in Minecraft's world.
+    pub fn pop_hit(&self) -> Option<proto::Hit> {
+        let ring = proto::OFF_HIT_RING;
+        let head = self.u64_at(ring + proto::RING_HEAD).load(Ordering::Acquire);
+        let mut tail = self.u64_at(ring + proto::RING_TAIL).load(Ordering::Relaxed);
+        if tail >= head {
+            return None;
+        }
+        if head - tail > proto::HIT_ENTRIES {
+            tail = head - proto::HIT_ENTRIES;
+        }
+        let at = ring + proto::RING_DATA + (tail % proto::HIT_ENTRIES) as usize * proto::HIT_BYTES;
+        let point = [0, 1, 2].map(|i| f64::from_bits(self.u64_at(at + 0x08 + i * 8).load(Ordering::Relaxed)));
+        let hit = proto::Hit {
+            shot_id: self.u32_at(at).load(Ordering::Relaxed),
+            kind: self.u32_at(at + 0x04).load(Ordering::Relaxed),
+            point,
+            damage: f32::from_bits(self.u32_at(at + 0x2C).load(Ordering::Relaxed)),
+            headshot: self.u32_at(at + 0x30).load(Ordering::Relaxed) != 0,
+        };
+        self.u64_at(ring + proto::RING_TAIL).store(tail + 1, Ordering::Release);
+        Some(hit)
+    }
+
     /// Hands Minecraft a click for its inventory. False if its ring is full.
     pub fn push_ui_click(&self, click: &proto::UiClick) -> bool {
         let ring = proto::OFF_UI_CLICK_RING;

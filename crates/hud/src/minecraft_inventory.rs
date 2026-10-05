@@ -372,6 +372,23 @@ pub(crate) fn update_minecraft_hud(
             (MC_HOTBAR * unit / (HOTBAR_STRIP * pixels_per_virtual(&surface, 1.0, (CENTER, MAX)))).max(0.5)
         });
         draw_hotbar(&mut canvas, &mut ui, weapons, strings, &mut gaps, time.delta_secs());
+        // MW2's hitmarker, as `_damagefeedback.gsc` draws it: 24 x 48 about the
+        // middle of the screen, fading out over a second.
+        if let Some(age) = ui.hit_marker {
+            let alpha = (1.0 - age).clamp(0.0, 1.0);
+            let k = std::mem::replace(&mut canvas.k, 1.0);
+            canvas.quad(
+                -12.0,
+                -12.0,
+                24.0,
+                48.0,
+                [1.0, 1.0, 1.0, alpha],
+                gamemode_iw4::DAMAGE_FEEDBACK_SHADER,
+                [0.0, 0.0, 1.0, 1.0],
+                (CENTER, CENTER),
+            );
+            canvas.k = k;
+        }
         ui.character_box = None;
     } else {
         ui.hotbar_top = None;

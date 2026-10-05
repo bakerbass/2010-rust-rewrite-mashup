@@ -43,7 +43,7 @@ pub use menus::ScriptMenus;
 pub use overhead_names::{
     OverheadPosedHead, OverheadPosedPlayerFrame, OverheadPosedPlayerFramePublished,
 };
-pub use plugin::HudPlugin;
+pub use plugin::{HudPlugin, HudRoot};
 pub use presentation_scale::{
     HorizontalAlign, PlacedRect, PresentationScale, ScaleClass, VIRTUAL_HEIGHT, VIRTUAL_WIDTH,
     VerticalAlign,

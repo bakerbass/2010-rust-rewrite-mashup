@@ -3,7 +3,7 @@
 //! bump `VERSION`.
 
 pub const MAGIC: u32 = 0x4732_574D; // "MW2G"
-pub const VERSION: u32 = 4;
+pub const VERSION: u32 = 5;
 pub const MAPPING_NAME: &str = "Local\\SkyCraft_MW2_v1";
 
 pub const OFF_HEADER: usize = 0x0;
@@ -28,6 +28,14 @@ pub const HDR_VIEWPORT_H: usize = 0x24;
 
 // Control (Minecraft -> guest, seqlock) at 0x100: the gun in Minecraft's hand.
 pub const OFF_CONTROL: usize = 0x100;
+pub const CT_SEQ: usize = 0x00;
+pub const CT_WEAPON: usize = 0x04;
+pub const CT_BUTTONS: usize = 0x08;
+pub const BTN_ATTACK: u32 = 1 << 0;
+pub const BTN_ADS: u32 = 1 << 1;
+pub const BTN_RELOAD: u32 = 1 << 2;
+pub const BTN_MELEE: u32 = 1 << 3;
+pub const BTN_HOLD_BREATH: u32 = 1 << 7;
 pub const WEAPON_NONE: u32 = 0;
 /// Minecraft's gun items and the MW2 weapons they are.
 pub const WEAPONS: [(u32, &str); 3] = [(1, "cheytac_mp"), (2, "spas12_mp"), (3, "ump45_mp")];
@@ -36,6 +44,48 @@ pub const WEAPONS: [(u32, &str); 3] = [(1, "cheytac_mp"), (2, "spas12_mp"), (3, 
 pub const RING_HEAD: usize = 0x00;
 pub const RING_TAIL: usize = 0x40;
 pub const RING_DATA: usize = 0x80;
+
+// Shots (guest -> Minecraft ring) at 0x1000; hits (Minecraft -> guest ring) at 0x9000.
+pub const OFF_SHOT_RING: usize = 0x1000;
+pub const SHOT_ENTRIES: u64 = 256;
+pub const SHOT_BYTES: usize = 0x50;
+pub const OFF_HIT_RING: usize = 0x9000;
+pub const HIT_ENTRIES: u64 = 256;
+pub const HIT_BYTES: usize = 0x38;
+pub const HIT_MISS: u32 = 0;
+pub const HIT_WORLD: u32 = 1;
+pub const HIT_BLOCK: u32 = 2;
+pub const HIT_ACTOR: u32 = 3;
+pub const HIT_KILL: u32 = 4;
+pub const HIT_MOB: u32 = 5;
+
+/// One bullet for Minecraft to trace (`Shot` in the header). Minecraft
+/// coordinates and blocks.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Shot {
+    pub id: u32,
+    pub blast: u32,
+    pub weapon: u32,
+    pub origin: [f64; 3],
+    pub direction: [f32; 3],
+    pub range: f32,
+    pub damage: f32,
+    pub min_damage: f32,
+    pub damage_range: f32,
+    pub min_damage_range: f32,
+    pub head_multiplier: f32,
+    pub body_multiplier: f32,
+}
+
+/// What a shot hit, back from Minecraft (`Hit` in the header).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Hit {
+    pub shot_id: u32,
+    pub kind: u32,
+    pub point: [f64; 3],
+    pub damage: f32,
+    pub headshot: bool,
+}
 
 // The inventory (Minecraft -> guest, seqlock) at 0xD000. Stacks: 0..41 the
 // vanilla inventory (0..9 hotbar, 9..36 main, 36..40 armour feet to head, 40
@@ -137,6 +187,7 @@ pub const ST_SPREAD: usize = 0x1C;
 pub const ST_GUEST_FRAME: usize = 0x20;
 pub const ST_HOTBAR_TOP: usize = 0x28;
 pub const ST_READY: u32 = 1 << 0;
+pub const ST_ADS: u32 = 1 << 3;
 
 /// What the guest tells Minecraft each frame (`State` in the header).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -176,6 +227,12 @@ mod tests {
         // kOffOverlayPixels + 3 slots of 3840 x 2160 RGBA.
         assert_eq!(MAPPING_BYTES, 0x10000 + 3 * 3840 * 2160 * 4);
         assert_eq!(OFF_OVERLAY_SLOT_HDR + OVERLAY_SLOTS * SLOT_HDR_SIZE, 0x400);
+    }
+
+    #[test]
+    fn rings_fit_where_the_header_puts_them() {
+        assert!(OFF_SHOT_RING + RING_DATA + SHOT_ENTRIES as usize * SHOT_BYTES <= OFF_HIT_RING);
+        assert!(OFF_HIT_RING + RING_DATA + HIT_ENTRIES as usize * HIT_BYTES <= OFF_UI);
     }
 
     #[test]

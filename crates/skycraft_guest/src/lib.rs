@@ -17,6 +17,7 @@ mod inventory;
 mod link;
 mod motion;
 pub mod proto;
+mod shoot;
 
 use link::Link;
 use motion::McLink;
@@ -38,15 +39,16 @@ impl Plugin for SkycraftGuestPlugin {
         // Minecraft's hotbar picks among the Minecraft map's guns, so the
         // soldier carries them all.
         sim::carry_block_world_guns(true);
+        sim::hand_shots_to_guest(true);
         stay_unthrottled();
         app.init_resource::<Guest>()
             .add_systems(First, pace_to_skyrim)
             .insert_non_send(inventory::GuestInventory::default())
             .init_resource::<frame::MinecraftUi>()
-            .add_systems(Update, (connect, retarget_lens).chain())
+            .add_systems(Update, (connect, retarget_lens, hud_on_lens).chain())
             .add_systems(
                 Update,
-                (drive_soldier, inventory::sync_inventory)
+                (drive_soldier, inventory::sync_inventory, shoot::forward_shots)
                     .after(connect)
                     .in_set(frame::ClientSet::Reconcile),
             );
@@ -152,6 +154,38 @@ fn retarget_lens(
     }
 }
 
+/// The HUD's Bevy UI (the scope overlay, the hip crosshair) on the lens. Left
+/// to itself it goes on the default UI camera, which is one of the window's
+/// (the loading screen's or the console's), and the window is never shown.
+/// The HUD lays itself out in the window's logical pixels, which the hidden
+/// window doesn't keep at the image's size (display scaling, Windows' own
+/// say): UI scale maps them onto the image.
+fn hud_on_lens(
+    mut commands: Commands,
+    guest: Res<Guest>,
+    lenses: Query<Entity, With<GuestLens>>,
+    roots: Query<(Entity, Option<&bevy::ui::UiTargetCamera>), With<hud::HudRoot>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut ui_scale: ResMut<bevy::ui::UiScale>,
+) {
+    if let (Some((_, size)), Ok(window)) = (guest.target.as_ref(), windows.single())
+        && window.width() > 0.0
+    {
+        let scale = size.x as f32 / window.width();
+        if (ui_scale.0 - scale).abs() > 1e-4 {
+            ui_scale.0 = scale;
+        }
+    }
+    let Ok(lens) = lenses.single() else {
+        return;
+    };
+    for (root, target) in &roots {
+        if target.is_none_or(|t| t.entity() != lens) {
+            commands.entity(root).insert(bevy::ui::UiTargetCamera(lens));
+        }
+    }
+}
+
 /// One frame of the lens image back from the GPU, handed to Skyrim as it is
 /// (BGRA; Skyrim's texture takes it that way).
 fn publish_frame(frame: On<ReadbackComplete>, mut guest: ResMut<Guest>) {
@@ -252,6 +286,10 @@ fn drive_soldier(
     mut actions: ResMut<net::ClientActionInput>,
     mut console: ResMut<console::ConsoleInputState>,
     (ui, windows): (Res<frame::MinecraftUi>, Query<&Window, With<PrimaryWindow>>),
+    (kick, settings): (
+        Option<Res<render_anim::occupancy::view_kick::SessionViewKick>>,
+        Res<frame::GameSettings>,
+    ),
 ) {
     if guest.link.is_none() {
         return;
@@ -267,9 +305,12 @@ fn drive_soldier(
     let ready = pose.is_some_and(|pose| pose.in_world()) && ps.is_some();
     guest.state_frames += 1;
     if let Some(link) = &guest.link {
+        let ads = ps.map_or(0.0, |ps| ps.f_weapon_pos_frac);
         let state = proto::State {
-            flags: if ready { proto::ST_READY } else { 0 },
-            fov_scale: 1.0,
+            flags: if ready { proto::ST_READY } else { 0 } | if ads >= 0.99 { proto::ST_ADS } else { 0 },
+            ads_fraction: ads,
+            // MW2's ADS zoom, for Minecraft's camera (and so Skyrim's) to take.
+            fov_scale: kick.as_ref().map_or(1.0, |kick| shoot::zoom(settings.fov, kick.horiz_fov_deg)),
             hotbar_top: hotbar_top(&ui, &windows),
             ..proto::State::default()
         };
@@ -296,7 +337,22 @@ fn drive_soldier(
         0.0,
     ]);
     actions.pad_move = pose.stick();
-    hold(&mut console, &mut guest.held, "+breath_sprint", pose.sprinting());
+    // The gun's buttons, held in Minecraft while it holds one of MW2's guns.
+    let (weapon, buttons) = guest
+        .link
+        .as_ref()
+        .and_then(link::Link::read_control)
+        .unwrap_or((proto::WEAPON_NONE, 0));
+    let buttons = if weapon == proto::WEAPON_NONE { 0 } else { buttons };
+    let firing = buttons & (proto::BTN_ATTACK | proto::BTN_ADS) != 0;
+    hold(&mut console, &mut guest.held, "+attack", buttons & proto::BTN_ATTACK != 0);
+    hold(&mut console, &mut guest.held, "+speed_throw", buttons & proto::BTN_ADS != 0);
+    hold(&mut console, &mut guest.held, "+usereload", buttons & proto::BTN_RELOAD != 0);
+    hold(&mut console, &mut guest.held, "+melee", buttons & proto::BTN_MELEE != 0);
+    // MW2's one button for both: sprint at the hip (it doesn't fire or aim at
+    // a sprint), hold the sniper's breath while aiming.
+    let hold_breath = buttons & proto::BTN_ADS != 0 && buttons & proto::BTN_HOLD_BREATH != 0;
+    hold(&mut console, &mut guest.held, "+breath_sprint", (pose.sprinting() && !firing) || hold_breath);
 }
 
 /// Where the hotbar starts, as a fraction of the overlay's height (0: none).

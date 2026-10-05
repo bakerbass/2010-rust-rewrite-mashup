@@ -30,7 +30,7 @@ use crate::targetmap::{TargetmapRaster, spawn_targetmap, update_targetmap};
 use crate::weaponbar::{WeaponbarRaster, spawn_weaponbar, update_weaponbar};
 
 #[derive(Component)]
-struct HudRoot;
+pub struct HudRoot;
 
 pub struct HudPlugin;
 

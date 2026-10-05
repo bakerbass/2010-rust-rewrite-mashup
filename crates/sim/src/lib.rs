@@ -18,6 +18,7 @@ pub mod identities;
 pub mod input;
 mod item;
 pub use item::carry_block_world_guns;
+pub use combat::{GuestShot, hand_shots_to_guest, take_guest_shots};
 mod mantle_xanim;
 pub mod voxel;
 pub mod match_state;

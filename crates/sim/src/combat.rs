@@ -1084,6 +1084,50 @@ fn segment_is_shield(collider: Option<ColliderId>) -> bool {
     )
 }
 
+/// One bullet a SkyCraft guest hands to its Minecraft instead of tracing it
+/// here (`hand_shots_to_guest`): map units, MW2's damage and falloff.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GuestShot {
+    pub shot_id: u32,
+    pub pellet: u16,
+    pub weapon: u32,
+    pub origin: [f32; 3],
+    pub direction: [f32; 3],
+    pub range: f32,
+    pub damage: f32,
+    pub min_damage: f32,
+    pub max_damage_range: f32,
+    pub min_damage_range: f32,
+    pub head_scale: f32,
+    pub body_scale: f32,
+}
+
+/// `Some` while bullets go to the guest; bounded so a stalled guest can't grow it.
+static GUEST_SHOTS: std::sync::Mutex<Option<Vec<GuestShot>>> = std::sync::Mutex::new(None);
+const GUEST_SHOTS_MAX: usize = 1024;
+
+/// A SkyCraft guest's world is a stand-in nobody sees: its bullets are not
+/// traced against it but handed over (`take_guest_shots`) for the real
+/// world to trace.
+pub fn hand_shots_to_guest(on: bool) {
+    if let Ok(mut shots) = GUEST_SHOTS.lock() {
+        *shots = on.then(Vec::new);
+    }
+}
+
+/// The bullets fired since the last call, oldest first.
+pub fn take_guest_shots() -> Vec<GuestShot> {
+    GUEST_SHOTS
+        .lock()
+        .ok()
+        .and_then(|mut shots| shots.as_mut().map(std::mem::take))
+        .unwrap_or_default()
+}
+
+/// Hit locations' damage scales MW2 applies to a head and a torso.
+const HITLOC_HEAD: u8 = 2;
+const HITLOC_TORSO_UPPER: u8 = 4;
+
 pub(crate) fn phase_trace(
     world: &mut FrameWorld,
     tick: Tick,
@@ -1096,6 +1140,29 @@ pub(crate) fn phase_trace(
         let Some(facts) = world.combat_facts_for(em.weapon) else {
             continue;
         };
+        if let Ok(mut guest) = GUEST_SHOTS.lock()
+            && let Some(queue) = guest.as_mut()
+        {
+            // Once, from the authority; prediction only skips the trace.
+            if world.publishes_snapshot() && queue.len() < GUEST_SHOTS_MAX {
+                let scale = if facts.damage > 0 { em.base_damage as f32 / facts.damage as f32 } else { 1.0 };
+                queue.push(GuestShot {
+                    shot_id: em.shot_id.0,
+                    pellet: em.pellet.0,
+                    weapon: em.weapon,
+                    origin: em.origin,
+                    direction: em.direction,
+                    range: em.max_range,
+                    damage: em.base_damage as f32,
+                    min_damage: facts.min_damage as f32 * scale,
+                    max_damage_range: facts.max_damage_range,
+                    min_damage_range: facts.min_damage_range,
+                    head_scale: facts.location_scale(HITLOC_HEAD),
+                    body_scale: facts.location_scale(HITLOC_TORSO_UPPER),
+                });
+            }
+            continue;
+        }
         let query = world.lagcomp_query_for(em.attacker, tick);
         let end = [
             em.origin[0] + em.direction[0] * em.max_range,

@@ -96,6 +96,9 @@ pub struct MinecraftUi {
     /// then as wide as Minecraft's (SkyCraft, where its health and hunger
     /// sit on it).
     pub gui_unit: Option<f32>,
+    /// Seconds since one of the player's bullets last hit someone, while
+    /// MW2's hitmarker shows (SkyCraft's guest, whose hits Minecraft reports).
+    pub hit_marker: Option<f32>,
     /// The top of the hotbar in window pixels, while it shows.
     pub hotbar_top: Option<f32>,
     /// The mouse in window pixels when it comes from elsewhere than this

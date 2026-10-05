@@ -99,6 +99,9 @@ pub struct MinecraftUi {
     /// Seconds since one of the player's bullets last hit someone, while
     /// MW2's hitmarker shows (SkyCraft's guest, whose hits Minecraft reports).
     pub hit_marker: Option<f32>,
+    /// The player looks from behind or in front (SkyCraft's guest, following
+    /// Minecraft's F5): no first-person gun or hands.
+    pub third_person: bool,
     /// The top of the hotbar in window pixels, while it shows.
     pub hotbar_top: Option<f32>,
     /// The mouse in window pixels when it comes from elsewhere than this

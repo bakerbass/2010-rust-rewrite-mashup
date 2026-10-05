@@ -62,11 +62,13 @@ impl Hud2dSurface {
 
 pub(crate) fn update_hud_surface(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    fixed: Option<Res<frame::skycraft::HudSurfaceSize>>,
     mut surface: ResMut<Hud2dSurface>,
 ) {
-    let next = match windows.single() {
-        Ok(window) => Hud2dSurface::new(window.width(), window.height()),
-        Err(_) => Hud2dSurface::new(0.0, 0.0),
+    let next = match (fixed.and_then(|f| f.0), windows.single()) {
+        (Some(size), _) => Hud2dSurface::new(size.x, size.y),
+        (None, Ok(window)) => Hud2dSurface::new(window.width(), window.height()),
+        (None, Err(_)) => Hud2dSurface::new(0.0, 0.0),
     };
     *surface = next;
 }

@@ -30,6 +30,7 @@ const MC_PITCH: usize = 0x24;
 const MC_PREV: usize = 0x70;
 const MC_CUR: usize = 0x88;
 const MC_TICK_MS: usize = 0xB8;
+const MC_CAMERA_MODE: usize = 0xC0;
 
 const MC_IN_WORLD: u32 = 1 << 0;
 const MC_ON_GROUND: u32 = 1 << 2;
@@ -43,6 +44,8 @@ pub struct McPose {
     pub pitch: f32,
     /// Blocks per second, Minecraft axes.
     pub velocity: [f32; 3],
+    /// Minecraft's camera: 0 first person, else F5's behind or in front.
+    pub camera_mode: u32,
 }
 
 impl McPose {
@@ -169,6 +172,7 @@ impl McLink {
             let prev = [0, 8, 16].map(|o| self.f64_at(at(MC_PREV + o)));
             let cur = [0, 8, 16].map(|o| self.f64_at(at(MC_CUR + o)));
             let tick_ms = self.f32_at(at(MC_TICK_MS));
+            let camera_mode = self.u32_at(at(MC_CAMERA_MODE)).load(Ordering::Relaxed);
             fence(Ordering::Acquire);
             if seq.load(Ordering::Relaxed) != before {
                 continue;
@@ -180,6 +184,7 @@ impl McLink {
                 yaw,
                 pitch,
                 velocity,
+                camera_mode,
             });
         }
         None

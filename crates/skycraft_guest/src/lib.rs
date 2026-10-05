@@ -45,6 +45,7 @@ impl Plugin for SkycraftGuestPlugin {
             .add_systems(First, pace_to_skyrim)
             .insert_non_send(inventory::GuestInventory::default())
             .init_resource::<frame::MinecraftUi>()
+            .init_resource::<frame::skycraft::HudSurfaceSize>()
             .add_systems(Update, (connect, retarget_lens, hud_on_lens).chain())
             .add_systems(
                 Update,
@@ -157,24 +158,18 @@ fn retarget_lens(
 /// The HUD's Bevy UI (the scope overlay, the hip crosshair) on the lens. Left
 /// to itself it goes on the default UI camera, which is one of the window's
 /// (the loading screen's or the console's), and the window is never shown.
-/// The HUD lays itself out in the window's logical pixels, which the hidden
-/// window doesn't keep at the image's size (display scaling, Windows' own
-/// say): UI scale maps them onto the image.
+/// The whole HUD lays itself out at the image's size: the hidden window
+/// doesn't keep it (display scaling, Windows' own say).
 fn hud_on_lens(
     mut commands: Commands,
     guest: Res<Guest>,
     lenses: Query<Entity, With<GuestLens>>,
     roots: Query<(Entity, Option<&bevy::ui::UiTargetCamera>), With<hud::HudRoot>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    mut ui_scale: ResMut<bevy::ui::UiScale>,
+    mut surface: ResMut<frame::skycraft::HudSurfaceSize>,
 ) {
-    if let (Some((_, size)), Ok(window)) = (guest.target.as_ref(), windows.single())
-        && window.width() > 0.0
-    {
-        let scale = size.x as f32 / window.width();
-        if (ui_scale.0 - scale).abs() > 1e-4 {
-            ui_scale.0 = scale;
-        }
+    let size = guest.target.as_ref().map(|(_, size)| size.as_vec2());
+    if surface.0 != size {
+        surface.0 = size;
     }
     let Ok(lens) = lenses.single() else {
         return;
@@ -285,7 +280,7 @@ fn drive_soldier(
     mut look: ResMut<net::LookState>,
     mut actions: ResMut<net::ClientActionInput>,
     mut console: ResMut<console::ConsoleInputState>,
-    (ui, windows): (Res<frame::MinecraftUi>, Query<&Window, With<PrimaryWindow>>),
+    (mut ui, surface): (ResMut<frame::MinecraftUi>, Res<frame::skycraft::HudSurfaceSize>),
     (kick, settings): (
         Option<Res<render_anim::occupancy::view_kick::SessionViewKick>>,
         Res<frame::GameSettings>,
@@ -311,7 +306,7 @@ fn drive_soldier(
             ads_fraction: ads,
             // MW2's ADS zoom, for Minecraft's camera (and so Skyrim's) to take.
             fov_scale: kick.as_ref().map_or(1.0, |kick| shoot::zoom(settings.fov, kick.horiz_fov_deg)),
-            hotbar_top: hotbar_top(&ui, &windows),
+            hotbar_top: hotbar_top(&ui, &surface),
             ..proto::State::default()
         };
         link.write_state(&state, guest.state_frames);
@@ -319,6 +314,7 @@ fn drive_soldier(
     let (Some(pose), Some(ps), true) = (pose, ps, ready) else {
         return;
     };
+    ui.third_person = pose.camera_mode != 0;
     let anchor = *guest.anchor.get_or_insert(ps.origin);
     if let Some(mut authority) = authority {
         authority.0.set_pinned_motion(
@@ -356,8 +352,8 @@ fn drive_soldier(
 }
 
 /// Where the hotbar starts, as a fraction of the overlay's height (0: none).
-fn hotbar_top(ui: &frame::MinecraftUi, windows: &Query<&Window, With<PrimaryWindow>>) -> f32 {
-    let height = windows.single().map_or(0.0, Window::height);
+fn hotbar_top(ui: &frame::MinecraftUi, surface: &frame::skycraft::HudSurfaceSize) -> f32 {
+    let height = surface.0.map_or(0.0, |size| size.y);
     match ui.hotbar_top {
         Some(top) if ui.active && height > 0.0 => (top / height).clamp(0.0, 1.0),
         _ => 0.0,

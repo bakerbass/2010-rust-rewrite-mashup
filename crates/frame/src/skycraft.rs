@@ -4,6 +4,13 @@
 //! Skyrim to composite, instead of a world into a window.
 use std::sync::OnceLock;
 
+use bevy::prelude::*;
+
+/// The size the HUD lays itself out at, when not the window's: a guest's
+/// window is hidden and doesn't keep the size of the image it draws into.
+#[derive(Resource, Default, Clone, Copy, Debug, PartialEq)]
+pub struct HudSurfaceSize(pub Option<Vec2>);
+
 /// Set to `1` by the SkyCraft plugin when it starts the guest.
 pub const ENV: &str = "IW4L_SKYCRAFT";
 

@@ -6,8 +6,8 @@
 //                         stay in the pass but are not ours to show
 //   (1 - band, 1]         the viewmodel band: gun, hands, heartbeat screen
 // What drew nothing but still added light over the empty clear (muzzle flash,
-// tracers, sparks) is kept as straight alpha by its brightness, so it adds onto
-// Skyrim the way it added onto black.
+// tracers, sparks) keeps its brightness as alpha. The result is premultiplied
+// alpha, as is everything the HUD blends over the transparent clear.
 
 // render_backend::DEPTH_RANGE_BAND
 const VIEWMODEL_DEPTH: f32 = 1.0 - 0.015625;
@@ -36,5 +36,7 @@ fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     if glow <= 1.0 / 255.0 {
         return vec4<f32>(0.0);
     }
-    return vec4<f32>(colour.rgb / glow, glow);
+    // Premultiplied, like the HUD Bevy blends on top: over Skyrim this adds
+    // exactly the light it added over black.
+    return vec4<f32>(colour.rgb, glow);
 }

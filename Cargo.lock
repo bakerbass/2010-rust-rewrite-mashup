@@ -1966,6 +1966,7 @@ dependencies = [
  "session",
  "sha2",
  "sim",
+ "skycraft_guest",
  "ui",
 ]
 
@@ -5901,6 +5902,17 @@ checksum = "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
 dependencies = [
  "bytemuck",
  "read-fonts 0.41.0",
+]
+
+[[package]]
+name = "skycraft_guest"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "diag",
+ "frame",
+ "render_scene",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

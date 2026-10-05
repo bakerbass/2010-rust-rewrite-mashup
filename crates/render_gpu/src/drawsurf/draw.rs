@@ -28,6 +28,7 @@ pub(crate) fn register_drawsurf_render(app: &mut App) {
     );
     super::colour_submit::register(app);
     super::sun_effects::register(app);
+    super::skycraft_alpha::register(app);
     super::postfx::register(app);
     super::iw_tess::register(app);
     super::model_lighting_tiles::register(app);

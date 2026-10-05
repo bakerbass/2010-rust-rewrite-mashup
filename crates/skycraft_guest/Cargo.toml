@@ -1,0 +1,18 @@
+[package]
+name = "skycraft_guest"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "SkyCraft guest mode: MW2's guns and HUD rendered offscreen into shared memory for Skyrim."
+
+[dependencies]
+bevy.workspace = true
+diag.workspace = true
+frame.workspace = true
+render_scene.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+
+[lints]
+workspace = true

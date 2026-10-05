@@ -453,9 +453,14 @@ fn run_map(
     }
     app.insert_resource(master_intent);
     let dedicated = config.role == Role::Dedicated;
+    // A SkyCraft guest draws into shared memory for Skyrim: its window stays
+    // hidden, and an unfocused window must not slow the frame loop down.
+    let skycraft = frame::skycraft::active();
     if dedicated {
         app.insert_resource(bevy::winit::WinitSettings::continuous())
             .insert_resource(frame::Headless);
+    } else if skycraft {
+        app.insert_resource(bevy::winit::WinitSettings::continuous());
     }
     app.add_plugins(crate::plugins::default_plugins_with_quiet_log(
         WindowPlugin {
@@ -472,6 +477,7 @@ fn run_map(
                 },
                 resolution: (ACCEPTANCE_WIDTH, ACCEPTANCE_HEIGHT).into(),
                 present_mode,
+                visible: !skycraft,
                 ..default()
             }),
             ..default()
@@ -531,6 +537,10 @@ fn run_map(
         Role::Replay => add_runtime_plugins_with_role(&mut app, frame::RuntimeRole::Replay),
         Role::Listen | Role::Dedicated => add_runtime_plugins(&mut app),
         Role::Client => add_runtime_plugins_with_role(&mut app, frame::RuntimeRole::Client),
+    }
+    if skycraft {
+        app.insert_resource(ClearColor(Color::NONE))
+            .add_plugins(skycraft_guest::SkycraftGuestPlugin);
     }
     // The demo, before the playback moves into the world: it names the workload
     // in the bench manifest, and "same demo" is what makes two runs comparable

@@ -24,6 +24,7 @@ mod shadowmap_sun_gpu;
 mod sm3_wgsl;
 mod smodel_cache_gpu;
 mod smodel_cached;
+mod skycraft_alpha;
 mod state;
 mod sun_effects;
 mod texture_table;

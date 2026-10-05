@@ -5929,13 +5929,17 @@ impl ExactPrepare<'_> {
                     owner_object_id: matches!(kind, RetainedDrawKind::XModel { .. })
                         .then(|| drawsurf_object_id(key)),
                     minecraft_hidden: super::minecraft_world::hides_map()
-                        && matches!(
-                            kind,
+                        && match kind {
                             RetainedDrawKind::World { .. }
-                                | RetainedDrawKind::Smodel { .. }
-                                | RetainedDrawKind::Glass { .. }
-                                | RetainedDrawKind::MarkMesh { .. }
-                        ),
+                            | RetainedDrawKind::Glass { .. }
+                            | RetainedDrawKind::MarkMesh { .. } => true,
+                            // A SkyCraft guest keeps the map's static models: with
+                            // neither world nor static model draws left, the colour
+                            // pass also loses the viewmodel. They are masked out of
+                            // the overlay by depth instead (skycraft_alpha.wgsl).
+                            RetainedDrawKind::Smodel { .. } => !frame::skycraft::active(),
+                            _ => false,
+                        },
                     depth_min,
                     depth_max,
                     state: GfxPassState::from_bits(executable.state),

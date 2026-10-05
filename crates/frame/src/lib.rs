@@ -38,3 +38,4 @@ pub mod skate;
 pub use skate::SkateMode;
 pub mod minecraft_ui;
 pub use minecraft_ui::{InventoryPuppet, McClick, McSlot, McStack, MinecraftUi};
+pub mod skycraft;

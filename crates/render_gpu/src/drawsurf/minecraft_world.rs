@@ -179,10 +179,10 @@ fn layout() -> BindGroupLayoutDescriptor {
 
 static HIDES_MAP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Whether the loaded IW4 map is only standing in for a Minecraft world, so
-/// its own world surfaces are not drawn.
+/// Whether the loaded IW4 map is only standing in for a Minecraft world, or
+/// for Skyrim in a SkyCraft guest, so its own world surfaces are not drawn.
 pub(super) fn hides_map() -> bool {
-    HIDES_MAP.load(std::sync::atomic::Ordering::Relaxed)
+    HIDES_MAP.load(std::sync::atomic::Ordering::Relaxed) || frame::skycraft::active()
 }
 
 fn prepare_terrain(

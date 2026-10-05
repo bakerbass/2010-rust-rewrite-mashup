@@ -13,6 +13,7 @@ use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_resource::{TextureFormat, TextureUsages};
 use bevy::window::PrimaryWindow;
 
+mod inventory;
 mod link;
 mod motion;
 pub mod proto;
@@ -32,11 +33,16 @@ pub struct SkycraftGuestPlugin;
 
 impl Plugin for SkycraftGuestPlugin {
     fn build(&self, app: &mut App) {
+        // Minecraft's hotbar picks among the Minecraft map's guns, so the
+        // soldier carries them all.
+        sim::carry_block_world_guns(true);
         app.init_resource::<Guest>()
+            .insert_non_send(inventory::GuestInventory::default())
+            .init_resource::<frame::MinecraftUi>()
             .add_systems(Update, (connect, retarget_lens).chain())
             .add_systems(
                 Update,
-                drive_soldier
+                (drive_soldier, inventory::sync_inventory)
                     .after(connect)
                     .in_set(frame::ClientSet::Reconcile),
             );

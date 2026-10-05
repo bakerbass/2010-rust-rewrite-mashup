@@ -5909,11 +5909,14 @@ dependencies = [
 name = "skycraft_guest"
 version = "0.1.0"
 dependencies = [
+ "assets",
  "bevy",
  "console",
  "diag",
  "frame",
+ "minecraft_terrain",
  "net",
+ "render_anim",
  "render_scene",
  "sim",
  "windows-sys 0.61.2",

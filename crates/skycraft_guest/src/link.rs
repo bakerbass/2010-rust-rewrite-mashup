@@ -107,6 +107,97 @@ impl Link {
         seq.store(start.wrapping_add(1), Ordering::Release);
     }
 
+    /// Minecraft's inventory, or `None` while Minecraft is mid-write.
+    pub fn read_ui(&self) -> Option<proto::UiSnapshot> {
+        const BYTES: usize = proto::UI_STACKS + proto::UI_STACK_COUNT * proto::UI_STACK_BYTES;
+        let seq = self.u32_at(proto::OFF_UI + proto::UI_SEQ);
+        let mut raw = [0u8; BYTES];
+        for _ in 0..4 {
+            let before = seq.load(Ordering::Acquire);
+            if before & 1 != 0 {
+                std::hint::spin_loop();
+                continue;
+            }
+            // SAFETY: inside the mapped view; a torn copy is caught by the seqlock below.
+            unsafe {
+                std::ptr::copy_nonoverlapping(self.base.add(proto::OFF_UI), raw.as_mut_ptr(), BYTES);
+            }
+            std::sync::atomic::fence(Ordering::Acquire);
+            if seq.load(Ordering::Relaxed) != before {
+                continue;
+            }
+            let u32_le = |at: usize| u32::from_le_bytes(raw[at..at + 4].try_into().unwrap_or_default());
+            let stacks = (0..proto::UI_STACK_COUNT)
+                .map(|i| {
+                    let at = proto::UI_STACKS + i * proto::UI_STACK_BYTES;
+                    let id = &raw[at..at + proto::UI_ID_BYTES];
+                    let len = id.iter().position(|&b| b == 0).unwrap_or(id.len());
+                    if len == 0 {
+                        return None;
+                    }
+                    let durability = f32::from_bits(u32_le(at + proto::US_DURABILITY));
+                    Some(proto::UiStack {
+                        id: String::from_utf8_lossy(&id[..len]).into_owned(),
+                        weapon: u32_le(at + proto::US_WEAPON),
+                        count: u32_le(at + proto::US_COUNT),
+                        durability: (durability >= 0.0).then_some(durability),
+                    })
+                })
+                .collect();
+            return Some(proto::UiSnapshot {
+                flags: u32_le(proto::UI_FLAGS),
+                selected: (u32_le(proto::UI_SELECTED) as usize).min(8),
+                stacks,
+            });
+        }
+        None
+    }
+
+    /// The next mouse or key event of Minecraft's inventory screen.
+    pub fn pop_ui_input(&self) -> Option<proto::UiInput> {
+        let ring = proto::OFF_UI_INPUT_RING;
+        let head = self.u64_at(ring + proto::RING_HEAD).load(Ordering::Acquire);
+        let mut tail = self.u64_at(ring + proto::RING_TAIL).load(Ordering::Relaxed);
+        if tail >= head {
+            return None;
+        }
+        if head - tail > proto::UI_INPUT_ENTRIES {
+            tail = head - proto::UI_INPUT_ENTRIES;
+        }
+        let at = ring + proto::RING_DATA + (tail % proto::UI_INPUT_ENTRIES) as usize * proto::UI_INPUT_BYTES;
+        // SAFETY: an entry inside the ring, published before `head` (acquired above).
+        let input = unsafe {
+            let u16_at = |o: usize| std::ptr::read_volatile(self.base.add(at + o).cast::<u16>());
+            proto::UiInput {
+                kind: u16_at(0),
+                code: u16_at(2),
+                mods: u16_at(4),
+                x: f32::from_bits(self.u32_at(at + 8).load(Ordering::Relaxed)),
+                y: f32::from_bits(self.u32_at(at + 12).load(Ordering::Relaxed)),
+            }
+        };
+        self.u64_at(ring + proto::RING_TAIL).store(tail + 1, Ordering::Release);
+        Some(input)
+    }
+
+    /// Hands Minecraft a click for its inventory. False if its ring is full.
+    pub fn push_ui_click(&self, click: &proto::UiClick) -> bool {
+        let ring = proto::OFF_UI_CLICK_RING;
+        let head = self.u64_at(ring + proto::RING_HEAD).load(Ordering::Relaxed);
+        let tail = self.u64_at(ring + proto::RING_TAIL).load(Ordering::Acquire);
+        if head - tail >= proto::UI_CLICK_ENTRIES {
+            return false;
+        }
+        let at = ring + proto::RING_DATA + (head % proto::UI_CLICK_ENTRIES) as usize * proto::UI_CLICK_BYTES;
+        self.u32_at(at).store(click.kind, Ordering::Relaxed);
+        self.u32_at(at + 4).store(click.slot, Ordering::Relaxed);
+        self.u32_at(at + 8).store(click.flags, Ordering::Relaxed);
+        self.u32_at(at + 12).store(click.hotbar, Ordering::Relaxed);
+        self.u64_at(at + 16).store(click.spread_mask, Ordering::Relaxed);
+        self.u64_at(ring + proto::RING_HEAD).store(head + 1, Ordering::Release);
+        true
+    }
+
     pub fn heartbeat(&self) {
         self.u64_at(proto::HDR_GUEST_HEARTBEAT)
             .store(tick_ms(), Ordering::Release);

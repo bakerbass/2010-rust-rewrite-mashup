@@ -130,7 +130,12 @@ pub(crate) fn update_compass(
         .wrapping_sub(local_vars.int("ui_show_killedBy"))
         < 4000;
     let ui_active = hud_input.is_some_and(|i| i.script_menu_open);
-    if !surface.is_ready() || killed_by_showing || ui_active || view.is_some_and(|v| v.in_killcam())
+    // SkyCraft's guest: the map is only a stand-in that nobody is on.
+    if !surface.is_ready()
+        || killed_by_showing
+        || ui_active
+        || view.is_some_and(|v| v.in_killcam())
+        || frame::skycraft::active()
     {
         hide(&mut pass);
         return;

@@ -6,11 +6,14 @@ license.workspace = true
 description = "SkyCraft guest mode: MW2's guns and HUD rendered offscreen into shared memory for Skyrim."
 
 [dependencies]
+assets.workspace = true
 bevy.workspace = true
 console.workspace = true
 diag.workspace = true
 frame.workspace = true
+minecraft_terrain = { path = "../minecraft_terrain" }
 net.workspace = true
+render_anim.workspace = true
 render_scene.workspace = true
 sim.workspace = true
 

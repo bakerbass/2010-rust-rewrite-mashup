@@ -3,7 +3,7 @@
 //! bump `VERSION`.
 
 pub const MAGIC: u32 = 0x4732_574D; // "MW2G"
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const MAPPING_NAME: &str = "Local\\SkyCraft_MW2_v1";
 
 pub const OFF_HEADER: usize = 0x0;
@@ -23,6 +23,101 @@ pub const HDR_GUEST_PID: usize = 0x08;
 pub const HDR_GUEST_HEARTBEAT: usize = 0x18;
 pub const HDR_VIEWPORT_W: usize = 0x20;
 pub const HDR_VIEWPORT_H: usize = 0x24;
+
+// Control (Minecraft -> guest, seqlock) at 0x100: the gun in Minecraft's hand.
+pub const OFF_CONTROL: usize = 0x100;
+pub const WEAPON_NONE: u32 = 0;
+/// Minecraft's gun items and the MW2 weapons they are.
+pub const WEAPONS: [(u32, &str); 3] = [(1, "cheytac_mp"), (2, "spas12_mp"), (3, "ump45_mp")];
+
+// SPSC rings: head (writer) at +0x00, tail (reader) at +0x40, entries from +0x80.
+pub const RING_HEAD: usize = 0x00;
+pub const RING_TAIL: usize = 0x40;
+pub const RING_DATA: usize = 0x80;
+
+// The inventory (Minecraft -> guest, seqlock) at 0xD000. Stacks: 0..41 the
+// vanilla inventory (0..9 hotbar, 9..36 main, 36..40 armour feet to head, 40
+// offhand), 41..45 the crafting grid, 45 its result, 46 the cursor's.
+pub const OFF_UI: usize = 0xD000;
+pub const UI_SEQ: usize = 0x00;
+pub const UI_FLAGS: usize = 0x04;
+pub const UI_SELECTED: usize = 0x08;
+pub const UI_STACKS: usize = 0x20;
+pub const UI_STACK_BYTES: usize = 0x40;
+pub const UI_ID_BYTES: usize = 48;
+pub const US_WEAPON: usize = 0x30;
+pub const US_COUNT: usize = 0x34;
+pub const US_DURABILITY: usize = 0x38;
+pub const UI_INVENTORY_SLOTS: usize = 41;
+pub const UI_CRAFTING: usize = 41;
+pub const UI_RESULT: usize = 45;
+pub const UI_CURSOR: usize = 46;
+pub const UI_STACK_COUNT: usize = 47;
+pub const UI_ACTIVE: u32 = 1 << 0;
+pub const UI_INVENTORY_OPEN: u32 = 1 << 1;
+
+// Inventory input (Minecraft -> guest ring) at 0xE000.
+pub const OFF_UI_INPUT_RING: usize = 0xE000;
+pub const UI_INPUT_ENTRIES: u64 = 128;
+pub const UI_INPUT_BYTES: usize = 0x10;
+pub const UI_IN_MOVE: u16 = 1;
+pub const UI_IN_BUTTON_DOWN: u16 = 2;
+pub const UI_IN_BUTTON_UP: u16 = 3;
+pub const UI_IN_KEY_DOWN: u16 = 4;
+pub const UI_IN_KEY_UP: u16 = 5;
+pub const UI_MOD_SHIFT: u16 = 1 << 0;
+pub const UI_MOD_CTRL: u16 = 1 << 1;
+
+// Inventory clicks (guest -> Minecraft ring) at 0xF000.
+pub const OFF_UI_CLICK_RING: usize = 0xF000;
+pub const UI_CLICK_ENTRIES: u64 = 64;
+pub const UI_CLICK_BYTES: usize = 0x20;
+pub const UI_CLICK_SLOT: u32 = 1;
+pub const UI_CLICK_OUTSIDE: u32 = 2;
+pub const UI_CLICK_GATHER: u32 = 3;
+pub const UI_CLICK_SWAP: u32 = 4;
+pub const UI_CLICK_SPREAD: u32 = 5;
+pub const UI_CLICK_RIGHT: u32 = 1 << 0;
+pub const UI_CLICK_SHIFT: u32 = 1 << 1;
+
+/// One stack of Minecraft's inventory.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UiStack {
+    pub id: String,
+    /// One of `WEAPONS`, for a gun item.
+    pub weapon: u32,
+    pub count: u32,
+    /// Fraction left of a damaged item.
+    pub durability: Option<f32>,
+}
+
+/// Minecraft's inventory as of its last frame.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UiSnapshot {
+    pub flags: u32,
+    pub selected: usize,
+    pub stacks: Vec<Option<UiStack>>,
+}
+
+/// A mouse or key event of Minecraft's inventory screen; x and y are 0..1.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct UiInput {
+    pub kind: u16,
+    pub code: u16,
+    pub mods: u16,
+    pub x: f32,
+    pub y: f32,
+}
+
+/// A click for Minecraft to apply to its inventory.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UiClick {
+    pub kind: u32,
+    pub slot: u32,
+    pub flags: u32,
+    pub hotbar: u32,
+    pub spread_mask: u64,
+}
 
 // State (guest -> Minecraft, seqlock) at 0x200.
 pub const OFF_STATE: usize = 0x200;
@@ -69,5 +164,13 @@ mod tests {
         // kOffOverlayPixels + 3 slots of 3840 x 2160 RGBA.
         assert_eq!(MAPPING_BYTES, 0x10000 + 3 * 3840 * 2160 * 4);
         assert_eq!(OFF_OVERLAY_SLOT_HDR + OVERLAY_SLOTS * SLOT_HDR_SIZE, 0x400);
+    }
+
+    #[test]
+    fn inventory_regions_fit_before_the_pixels() {
+        assert!(OFF_UI + UI_STACKS + UI_STACK_COUNT * UI_STACK_BYTES <= OFF_UI_INPUT_RING);
+        assert!(OFF_UI_INPUT_RING + RING_DATA + UI_INPUT_ENTRIES as usize * UI_INPUT_BYTES <= OFF_UI_CLICK_RING);
+        assert!(OFF_UI_CLICK_RING + RING_DATA + UI_CLICK_ENTRIES as usize * UI_CLICK_BYTES <= OFF_OVERLAY_PIXELS);
+        assert_eq!(US_DURABILITY + 8, UI_STACK_BYTES);
     }
 }

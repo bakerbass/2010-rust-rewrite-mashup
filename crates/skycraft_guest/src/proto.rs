@@ -3,7 +3,7 @@
 //! bump `VERSION`.
 
 pub const MAGIC: u32 = 0x4732_574D; // "MW2G"
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 pub const MAPPING_NAME: &str = "Local\\SkyCraft_MW2_v1";
 
 pub const OFF_HEADER: usize = 0x0;
@@ -20,6 +20,8 @@ pub const MAPPING_BYTES: usize = OFF_OVERLAY_PIXELS + OVERLAY_SLOT_BYTES * OVERL
 pub const HDR_MAGIC: usize = 0x00;
 pub const HDR_VERSION: usize = 0x04;
 pub const HDR_GUEST_PID: usize = 0x08;
+/// Skyrim's frames, counted in its Present: the guest renders one per frame.
+pub const HDR_HOST_FRAME: usize = 0x0C;
 pub const HDR_GUEST_HEARTBEAT: usize = 0x18;
 pub const HDR_VIEWPORT_W: usize = 0x20;
 pub const HDR_VIEWPORT_H: usize = 0x24;
@@ -130,6 +132,7 @@ pub const ST_ADS_FRACTION: usize = 0x14;
 pub const ST_FOV_SCALE: usize = 0x18;
 pub const ST_SPREAD: usize = 0x1C;
 pub const ST_GUEST_FRAME: usize = 0x20;
+pub const ST_HOTBAR_TOP: usize = 0x28;
 pub const ST_READY: u32 = 1 << 0;
 
 /// What the guest tells Minecraft each frame (`State` in the header).
@@ -142,17 +145,23 @@ pub struct State {
     pub ads_fraction: f32,
     pub fov_scale: f32,
     pub spread: f32,
+    /// Top of the guest's hotbar, a fraction of the screen's height (0: not
+    /// shown), so Minecraft can stack its health and hunger on it.
+    pub hotbar_top: f32,
 }
 
 // OverlayCtl fields.
 pub const OC_STATE: usize = 0x0;
 pub const OC_FRAMES_PUBLISHED: usize = 0x8;
 pub const OVERLAY_DIRTY: u32 = 1 << 2;
+/// `SH_FLAGS`: the pixels are BGRA, as the lens renders them.
+pub const OVERLAY_BGRA: u32 = 1 << 0;
 
 // OverlaySlotHdr fields; one header is 0x40 bytes.
 pub const SLOT_HDR_SIZE: usize = 0x40;
 pub const SH_WIDTH: usize = 0x00;
 pub const SH_HEIGHT: usize = 0x04;
+pub const SH_FLAGS: usize = 0x08;
 pub const SH_FRAME_ID: usize = 0x10;
 
 #[cfg(test)]

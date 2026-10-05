@@ -288,6 +288,7 @@ pub(crate) fn update_minecraft_hud(
     if !ui.active || !surface.is_ready() {
         pass.minecraft = TessJob::Hide;
         ui.character_box = None;
+        ui.hotbar_top = None;
         for _ in wheel.read() {}
         return;
     }
@@ -354,6 +355,7 @@ pub(crate) fn update_minecraft_hud(
         draw_hotbar(&mut canvas, &mut ui, weapons, strings, &mut gaps, time.delta_secs());
         ui.character_box = None;
     } else {
+        ui.hotbar_top = None;
         for _ in wheel.read() {}
         let hovered = mouse.and_then(|m| hovered_slot(&surface, m));
         let inside = mouse.is_some_and(|m| over_panel(&surface, m));
@@ -472,6 +474,8 @@ fn draw_hotbar(
     let x0 = -width * 0.5;
     let y = -size - 3.0;
     // The strip behind it.
+    let k = canvas.k;
+    ui.hotbar_top = Some(canvas.surface.apply_rect((x0 - 3.0) * k, (y - 3.0) * k, (width + 6.0) * k, (size + 6.0) * k, align.0, align.1).y);
     canvas.fill(x0 - 3.0, y - 3.0, width + 6.0, size + 6.0, [0.04, 0.03, 0.02, 0.50], align);
     canvas.quad(x0 - 3.0, y - 3.0, width + 6.0, size + 6.0, [ACCENT[0], ACCENT[1], ACCENT[2], 0.10], "gradient_fadein_fadebottom", [0.0, 0.0, 1.0, 1.0], align);
     canvas.frame(x0 - 3.0, y - 3.0, width + 6.0, size + 6.0, EDGE, align);

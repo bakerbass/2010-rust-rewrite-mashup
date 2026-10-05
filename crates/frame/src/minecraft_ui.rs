@@ -92,6 +92,8 @@ pub struct MinecraftUi {
     pub empty_hand: bool,
     /// How far through its swing the hand is, 0 to 1.
     pub hand_swing: f32,
+    /// The top of the hotbar in window pixels, while it shows.
+    pub hotbar_top: Option<f32>,
     /// The mouse in window pixels when it comes from elsewhere than this
     /// window: SkyCraft's guest gets it from Minecraft's inventory screen.
     pub pointer: Option<Vec2>,

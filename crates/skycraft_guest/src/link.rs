@@ -100,6 +100,7 @@ impl Link {
             (proto::ST_ADS_FRACTION, state.ads_fraction),
             (proto::ST_FOV_SCALE, state.fov_scale),
             (proto::ST_SPREAD, state.spread),
+            (proto::ST_HOTBAR_TOP, state.hotbar_top),
         ] {
             self.u32_at(at(field)).store(value.to_bits(), Ordering::Relaxed);
         }
@@ -203,14 +204,21 @@ impl Link {
             .store(tick_ms(), Ordering::Release);
     }
 
-    /// Copies one RGBA8 frame (rows `stride` bytes apart, top-down) into the
-    /// private back slot and swaps it into the middle.
+    /// Skyrim's frame counter.
+    pub fn host_frame(&self) -> u32 {
+        self.u32_at(proto::HDR_HOST_FRAME).load(Ordering::Acquire)
+    }
+
+    /// Copies one frame (RGBA8, or BGRA8 with `proto::OVERLAY_BGRA` in
+    /// `flags`; rows `stride` bytes apart, top-down) into the private back
+    /// slot and swaps it into the middle.
     pub fn publish_overlay(
         &mut self,
         width: u32,
         height: u32,
         stride: usize,
         rgba: &[u8],
+        flags: u32,
         frame_id: u64,
     ) {
         let width = width.min(proto::MAX_OVERLAY_W);
@@ -237,6 +245,7 @@ impl Link {
             }
         }
         let hdr = proto::OFF_OVERLAY_SLOT_HDR + self.back * proto::SLOT_HDR_SIZE;
+        self.u32_at(hdr + proto::SH_FLAGS).store(flags, Ordering::Relaxed);
         self.u32_at(hdr + proto::SH_WIDTH)
             .store(width, Ordering::Relaxed);
         self.u32_at(hdr + proto::SH_HEIGHT)

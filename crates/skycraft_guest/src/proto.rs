@@ -3,7 +3,7 @@
 //! bump `VERSION`.
 
 pub const MAGIC: u32 = 0x4732_574D; // "MW2G"
-pub const VERSION: u32 = 3;
+pub const VERSION: u32 = 4;
 pub const MAPPING_NAME: &str = "Local\\SkyCraft_MW2_v1";
 
 pub const OFF_HEADER: usize = 0x0;
@@ -44,6 +44,7 @@ pub const OFF_UI: usize = 0xD000;
 pub const UI_SEQ: usize = 0x00;
 pub const UI_FLAGS: usize = 0x04;
 pub const UI_SELECTED: usize = 0x08;
+pub const UI_GUI_UNIT: usize = 0x0C;
 pub const UI_STACKS: usize = 0x20;
 pub const UI_STACK_BYTES: usize = 0x40;
 pub const UI_ID_BYTES: usize = 48;
@@ -98,6 +99,8 @@ pub struct UiStack {
 pub struct UiSnapshot {
     pub flags: u32,
     pub selected: usize,
+    /// One of Minecraft's GUI pixels, a fraction of the screen's height.
+    pub gui_unit: f32,
     pub stacks: Vec<Option<UiStack>>,
 }
 

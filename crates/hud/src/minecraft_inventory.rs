@@ -51,6 +51,21 @@ const HEADER_H: f32 = 20.0;
 const GRID_X: f32 = -98.0;
 /// The character window.
 const BOX: [f32; 4] = [-73.0, -100.0, 62.0, 86.0];
+/// The hotbar's strip, virtual pixels across: nine slots of 22 at a pitch of
+/// 25, and a margin of 3 either side.
+const HOTBAR_STRIP: f32 = 25.0 * 9.0 - 3.0 + 6.0;
+/// Minecraft's own hotbar, GUI pixels across.
+const MC_HOTBAR: f32 = 182.0;
+/// The selected item's name in Minecraft: this many GUI pixels over its
+/// hotbar (over the armour row), and this tall. The real Minecraft's health
+/// and hunger sit on this hotbar, 4 GUI pixels up.
+const MC_NAME_ABOVE: f32 = 37.0 + 4.0 + 2.0;
+const MC_NAME_HEIGHT: f32 = 10.0;
+
+/// Window pixels per virtual pixel at the canvas's scale.
+fn pixels_per_virtual(surface: &crate::surface::Hud2dSurface, k: f32, align: (i32, i32)) -> f32 {
+    surface.apply_rect(0.0, 0.0, 1000.0, 1000.0, align.0, align.1).w / 1000.0 * k
+}
 
 /// Where each slot of the screen sits (x, y, size).
 fn layout() -> Vec<(McSlot, f32, f32, f32)> {
@@ -351,7 +366,11 @@ pub(crate) fn update_minecraft_hud(
         if keys.just_pressed(KeyCode::KeyQ) {
             ui.drop_selected = Some(ctrl);
         }
-        canvas.k = 1.15;
+        // As wide as the real Minecraft's hotbar when its GUI scale is known
+        // (SkyCraft): its health and hunger sit on this one.
+        canvas.k = ui.gui_unit.map_or(1.15, |unit| {
+            (MC_HOTBAR * unit / (HOTBAR_STRIP * pixels_per_virtual(&surface, 1.0, (CENTER, MAX)))).max(0.5)
+        });
         draw_hotbar(&mut canvas, &mut ui, weapons, strings, &mut gaps, time.delta_secs());
         ui.character_box = None;
     } else {
@@ -505,11 +524,15 @@ fn draw_hotbar(
         let fade = (1.0 - ((*age - 1.6) / 0.5).clamp(0.0, 1.0)).clamp(0.0, 1.0);
         if fade > 0.0 {
             let text = name.as_deref().unwrap_or(shown).to_uppercase();
-            let px = 9.0;
+            // Where Minecraft shows it, over the bars on this hotbar; else just over the hotbar.
+            let (px, top) = ui.gui_unit.map_or((9.0, y - 17.0), |unit| {
+                let per = pixels_per_virtual(canvas.surface, canvas.k, align);
+                (MC_NAME_HEIGHT * unit / per, y - 3.0 - MC_NAME_ABOVE * unit / per)
+            });
             let w = canvas.fonts.get(FONT_TITLE).map_or(0.0, |def| {
                 ui_text_width(def, &text, px / ui_text_height(1.0))
             });
-            canvas.text(FONT_TITLE, -w * 0.5, y - 17.0, px, [HIGHLIGHT[0], HIGHLIGHT[1], HIGHLIGHT[2], fade], &text, false, align);
+            canvas.text(FONT_TITLE, -w * 0.5, top, px, [HIGHLIGHT[0], HIGHLIGHT[1], HIGHLIGHT[2], fade], &text, false, align);
         }
     }
 }

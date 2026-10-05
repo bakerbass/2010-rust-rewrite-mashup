@@ -232,6 +232,10 @@ pub(crate) fn sync_inventory(
     ui.holding_item = ui.weapon_request.is_none();
     ui.empty_hand = selected.is_none();
 
+    let size = windows.single().map_or(Vec2::ONE, |w| Vec2::new(w.width(), w.height()));
+    // The hotbar matches Minecraft's own, which its health and hunger sit on.
+    ui.gui_unit = (snapshot.gui_unit > 0.0 && snapshot.gui_unit < 0.1).then(|| snapshot.gui_unit * size.y);
+
     // The inventory screen, and Minecraft's mouse and keys on it.
     let open = snapshot.flags & proto::UI_INVENTORY_OPEN != 0;
     if ui.inventory_open && !open {
@@ -243,7 +247,6 @@ pub(crate) fn sync_inventory(
         while link.pop_ui_input().is_some() {}
         return;
     }
-    let size = windows.single().map_or(Vec2::ONE, |w| Vec2::new(w.width(), w.height()));
     // Up to one press or release a frame, so a quick click still lands as a
     // press, then a release.
     while let Some(input) = link.pop_ui_input() {

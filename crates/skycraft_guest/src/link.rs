@@ -148,6 +148,7 @@ impl Link {
             return Some(proto::UiSnapshot {
                 flags: u32_le(proto::UI_FLAGS),
                 selected: (u32_le(proto::UI_SELECTED) as usize).min(8),
+                gui_unit: f32::from_bits(u32_le(proto::UI_GUI_UNIT)),
                 stacks,
             });
         }

@@ -142,6 +142,7 @@ pub(crate) fn place_inventory_puppet(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     cameras: Query<&Transform, With<render_scene::FlyCamera>>,
     lenses: Query<&Projection, With<render_scene::FpvLens>>,
+    fixed: Option<Res<frame::skycraft::HudSurfaceSize>>,
 ) {
     use std::sync::atomic::Ordering::Relaxed;
     puppet.active = false;
@@ -156,7 +157,11 @@ pub(crate) fn place_inventory_puppet(
     else {
         return;
     };
-    let (w, h) = (window.width().max(1.0), window.height().max(1.0));
+    // The HUD's size, which the character box is in (a SkyCraft guest's is its image's).
+    let (w, h) = match fixed.and_then(|f| f.0) {
+        Some(size) => (size.x.max(1.0), size.y.max(1.0)),
+        None => (window.width().max(1.0), window.height().max(1.0)),
+    };
     let tan_v = (lens.fov * 0.5).tan();
     let tan_h = tan_v * if lens.aspect_ratio > 1e-3 { lens.aspect_ratio } else { w / h };
     let (eye, fwd, right, up) = (camera.translation, *camera.forward(), *camera.right(), *camera.up());
